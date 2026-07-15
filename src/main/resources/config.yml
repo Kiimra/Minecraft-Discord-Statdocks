@@ -1,0 +1,118 @@
+# ============================================================================
+#  DiscordStatdockUpdater
+#  Edits Discord channel names every few minutes with live server info, using
+#  only the Discord REST API (no persistent bot connection by default).
+#
+#  Quick start:
+#    1. Create a Discord bot at https://discord.com/developers/applications,
+#       copy its token into 'token' below.
+#    2. Invite the bot to your server with the "Manage Channels" permission.
+#    3. Enable Developer Mode in Discord, right-click a voice/stage/category
+#       channel -> "Copy Channel ID", and paste it into a channel entry below.
+#    4. Run the server, then /statdock status in-game to check everything.
+#
+#  Discord only allows a channel to be renamed about twice per 10 minutes, so
+#  keep 'interval-seconds' at 300 or higher. The plugin never renames a channel
+#  to a name it already has, so a quiet server costs no edits at all.
+# ============================================================================
+
+# Your Discord bot token. Keep this secret!
+token: "YOUR_BOT_TOKEN"
+
+# ---------------------------------------------------------------------------
+# Available placeholders (use them in any template below):
+#   {online}   players currently online
+#   {max}      max players (server-max-players)
+#   {uptime}   session uptime, e.g. "45m", "2h 10m", "8d 23h"
+#   {tps}      current TPS (one decimal, capped at 20.0)
+#   {ip}       server address (see the 'ip' section)
+#   {port}     server port
+#   {version}  Minecraft version
+#   {record}   peak online players (only if 'record.enabled' is true)
+#   {players}  comma-separated list of online player names
+# ---------------------------------------------------------------------------
+
+# How often (seconds) the plugin re-checks the server and pushes due updates.
+# Lower = snappier, but Discord's own rename limit still applies per channel.
+engine:
+  tick-seconds: 5
+
+# Client-side safety net for Discord's rename limit (~2 renames / 10 min per
+# channel). Leave this alone unless you really know what you are doing.
+rate-limit:
+  max-edits: 2
+  window-seconds: 600
+
+# How the {ip} placeholder is resolved, in priority order:
+#   1. 'override' (recommended: your public address, e.g. play.myserver.com)
+#   2. the server's own server-ip, if set
+#   3. a one-time public IP lookup via api.ipify.org (set resolve-public-ip)
+ip:
+  override: ""
+  resolve-public-ip: true
+  unknown-text: "unknown"
+
+# Lag state: shown when TPS drops below the threshold (uses the 'lag' template).
+lag:
+  enabled: true
+  threshold-tps: 15.0
+
+# Optional peak-players tracking for the {record} placeholder.
+#   enabled: turns the {record} placeholder on
+#   persist: keep the record across restarts (stored in record.txt)
+# Both are OFF by default; uptime and player counts never persist regardless.
+record:
+  enabled: false
+  persist: false
+
+# Optional bot presence (the bot's status text). Disabled by default so the
+# plugin stays purely REST-based; while disabled the bot appears offline in
+# Discord's member list, which is cosmetic only. Enabling it opens a single
+# lightweight gateway connection (identify + heartbeat, no event listening).
+presence:
+  enabled: false
+  # playing | watching | listening | competing
+  activity-type: "watching"
+  # online | idle | dnd
+  status: "online"
+  # The messages below are cycled every 'interval-seconds' (min 15).
+  interval-seconds: 60
+  messages:
+    - "{online}/{max} players"
+    - "up {uptime}"
+
+# Default templates used by every channel, unless a channel overrides them.
+defaults:
+  online: "🟢│Online {online}/{max} ({uptime})"
+  idle: "🌙│Zzz... {online}/{max} ({uptime})"
+  offline: "🔴│Offline"
+  lag: "🟡│Lag {online}/{max} ({tps} TPS)"
+  maintenance: "🟣│Maintenance"
+
+# The channels to keep updated. Add as many as you like. Each is edited by its
+# Discord channel ID and should be a voice, stage, or category channel. Any of
+# the per-state templates (online/idle/offline/lag/maintenance) may be set here
+# to override the defaults above; omit them to use the defaults.
+channels:
+  players:
+    id: "000000000000000000"
+    interval-seconds: 600
+  # Example of a second, fully customized channel:
+  # uptime:
+  #   id: "000000000000000000"
+  #   interval-seconds: 600
+  #   online: "⏳│Uptime {uptime}"
+  #   idle: "⏳│Uptime {uptime}"
+  #   offline: "⏳│Offline"
+
+# In-game command feedback. Supports & colour codes.
+messages:
+  prefix: "&8[&bStatdock&8]&r "
+  no-permission: "&cYou don't have permission to do that."
+  reload-success: "&aConfiguration reloaded."
+  reload-fail: "&cReload failed - check the console."
+  force-update: "&aForcing an update of all statdocks..."
+  maintenance-on: "&aMaintenance mode enabled."
+  maintenance-off: "&aMaintenance mode disabled."
+  maintenance-usage: "&cUsage: /statdock maintenance <on|off>"
+  unknown-subcommand: "&cUnknown subcommand. Try /statdock help."
