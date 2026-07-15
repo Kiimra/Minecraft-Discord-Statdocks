@@ -7,34 +7,20 @@ version = "1.0.0"
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
-
-// By default the plugin compiles against the bundled API stubs (src/stubs),
-// which mirror the exact Bukkit/Paper API surface this plugin uses and are
-// never packaged into the jar. Build with -PusePaperApi=true to compile
-// against the real Paper API instead (recommended before publishing a
-// release; requires network access to repo.papermc.io).
-val usePaperApi = providers.gradleProperty("usePaperApi").getOrElse("false").toBoolean()
 
 repositories {
-    mavenCentral()
-    if (usePaperApi) {
-        maven("https://repo.papermc.io/repository/maven-public/")
-    }
-}
-
-sourceSets {
-    create("stubs")
+  maven {
+    name = "papermc"
+    url = uri("https://repo.papermc.io/repository/maven-public/")
+  }
 }
 
 dependencies {
-    if (usePaperApi) {
-        compileOnly("io.papermc.paper:paper-api:${providers.gradleProperty("paperApiVersion").get()}")
-    } else {
-        compileOnly(sourceSets["stubs"].output)
-    }
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+
     // Bundled by the Paper server at runtime; used for JSON on the Discord side.
     compileOnly("com.google.code.gson:gson:2.11.0")
 
