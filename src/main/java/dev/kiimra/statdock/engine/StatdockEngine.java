@@ -162,23 +162,29 @@ public final class StatdockEngine {
      */
     public void pushOffline() {
         shuttingDown = true;
-        ServerSnapshot snapshot = new ServerSnapshot(0, 0, 20.0, 0, "", "");
-        for (ManagedChannel mc : channels) {
-            if (mc.skipped) {
-                continue;
+        // Serialize with any async tick that may still be in flight at shutdown.
+        tickLock.lock();
+        try {
+            ServerSnapshot snapshot = new ServerSnapshot(0, 0, 20.0, 0, "", "");
+            for (ManagedChannel mc : channels) {
+                if (mc.skipped) {
+                    continue;
+                }
+                String desired = clampName(
+                        PlaceholderResolver.resolve(config.template(mc.config, ServerState.OFFLINE), context(snapshot)));
+                if (desired.isEmpty() || desired.equals(mc.lastAppliedName)) {
+                    continue;
+                }
+                EditResult result = discord.setChannelName(mc.config.id(), desired);
+                if (result.isSuccess()) {
+                    mc.lastAppliedName = desired;
+                } else {
+                    logger.warning("Could not set offline name for '" + mc.config.name() + "': " + result.outcome()
+                            + (result.detail() != null ? " (" + result.detail() + ")" : ""));
+                }
             }
-            String desired = clampName(
-                    PlaceholderResolver.resolve(config.template(mc.config, ServerState.OFFLINE), context(snapshot)));
-            if (desired.isEmpty() || desired.equals(mc.lastAppliedName)) {
-                continue;
-            }
-            EditResult result = discord.setChannelName(mc.config.id(), desired);
-            if (result.isSuccess()) {
-                mc.lastAppliedName = desired;
-            } else {
-                logger.warning("Could not set offline name for '" + mc.config.name() + "': " + result.outcome()
-                        + (result.detail() != null ? " (" + result.detail() + ")" : ""));
-            }
+        } finally {
+            tickLock.unlock();
         }
     }
 
