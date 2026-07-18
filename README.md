@@ -109,3 +109,7 @@ directly against the real Paper API, so it needs network access to
 
 The jar is produced in `build/libs/`. Only `com.google.code.gson` is used on the
 Discord side and it is **provided by Paper at runtime**, so nothing is shaded.
+
+## License
+
+[MIT](LICENSE)
