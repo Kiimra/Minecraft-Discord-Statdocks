@@ -42,8 +42,6 @@ tasks.processResources {
 
 tasks.jar {
     archiveBaseName.set("DiscordStatdockUpdater")
-    // The stubs live in a separate compile-only source set, so they are never
-    // part of the main output that goes into the jar.
 }
 
 tasks.test {

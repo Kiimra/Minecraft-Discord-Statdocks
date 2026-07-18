@@ -17,6 +17,11 @@ almost nothing to run.
 - **REST-only by default** — the bot never connects to the Discord gateway, so
   it uses negligible resources. (It therefore shows as *offline* in Discord's
   member list, which is purely cosmetic — see Presence below.)
+- **Reuse an existing bot** — because everything goes through the Discord REST
+  API, you don't need to create a dedicated bot: you can drop in the token of a
+  bot you already have, even one that is currently running elsewhere. REST
+  calls don't interfere with that bot's gateway session, so both can operate at
+  the same time.
 - **Multiple channels**, each with its own update interval and optional
   per-channel templates. Works across any number of Discord servers, since
   channels are addressed by ID.
@@ -56,7 +61,13 @@ Usable in any channel template and in presence messages:
 ## Setup
 
 1. Create a bot at the [Discord Developer Portal](https://discord.com/developers/applications)
-   and copy its **token** into `token` in `config.yml`.
+   and copy its **token** into `token` in `config.yml` — or **reuse the token
+   of a bot you already have**. The plugin only talks to Discord through the
+   REST API, so an existing bot keeps working normally (even while it is
+   running somewhere else) while this plugin renames channels with the same
+   token. The only caveat: if you enable the optional `presence` feature, this
+   plugin opens its own gateway session, which may override the status shown by
+   the other instance of the bot.
 2. Invite the bot to your server with the **Manage Channels** permission.
 3. Enable **Developer Mode** in Discord, right-click a voice/stage/category
    channel → **Copy Channel ID**, and put it under `channels:` in the config.
@@ -87,15 +98,13 @@ Usable in any channel template and in presence messages:
 
 ## Building
 
-Requires JDK 21.
+Requires JDK 25 — if you don't have it installed, Gradle downloads a matching
+JDK automatically via the Foojay toolchain resolver. The build compiles
+directly against the real Paper API, so it needs network access to
+`repo.papermc.io` (the Paper API version is declared in `build.gradle.kts`).
 
 ```bash
-# Compiles against bundled API stubs — no network needed for the Bukkit API:
 ./gradlew build
-
-# Recommended before publishing a release — compiles against the real Paper API
-# (needs access to repo.papermc.io). Set paperApiVersion in gradle.properties.
-./gradlew build -PusePaperApi=true
 ```
 
 The jar is produced in `build/libs/`. Only `com.google.code.gson` is used on the
