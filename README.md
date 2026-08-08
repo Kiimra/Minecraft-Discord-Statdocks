@@ -113,3 +113,5 @@ Discord side and it is **provided by Paper at runtime**, so nothing is shaded.
 ## License
 
 [MIT](LICENSE)
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/P5P21MVAXA)
