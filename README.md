@@ -27,7 +27,11 @@ almost nothing to run.
   channels are addressed by ID.
 - **Five states**, all with configurable text/emoji: `online`, `idle`,
   `offline`, `lag` (🟡, below a TPS threshold) and `maintenance` (🟣, toggled by
-  command).
+  command and remembered across restarts and reloads).
+- **PlaceholderAPI support** - any `%placeholder%` from
+  [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/) can
+  be used in channel names and presence messages, mixed with the built-in
+  `{placeholders}`. Optional: without PlaceholderAPI the plugin works as before.
 - **Immediate updates** - the 🟢 ↔ 🌙 switch happens the moment a player joins
   or leaves, bypassing the normal cycle. A channel is never renamed to a name it
   already shows, so no edits are wasted.
@@ -58,6 +62,31 @@ Usable in any channel template and in presence messages:
 | `{record}`  | peak online players (needs `record.enabled`) |
 | `{players}` | comma-separated list of online player names |
 
+### PlaceholderAPI
+
+If [PlaceholderAPI](https://www.spigotmc.org/resources/placeholderapi.6245/)
+(2.12.3 or newer) is installed, the plugin hooks into it automatically and any
+`%placeholder%` it provides works in every template and presence message,
+alongside the built-in ones:
+
+```yaml
+defaults:
+  online: "🟢│{online}/{max} │ %server_unique_joins% joined"
+  idle: "🌙│Free slots: %math_0_{max}-{online}%"
+```
+
+- Install the expansions you use first (e.g. `/papi ecloud download Server`,
+  then `/papi reload`).
+- Placeholders are parsed without a player, so only server-wide ones work;
+  player-specific ones (e.g. `%player_name%`) are left as written.
+- Built-in `{placeholders}` are replaced first, so they can be used inside
+  PlaceholderAPI ones, like the `%math_...%` example above.
+- Colour codes are removed from the final name, since Discord can't show them.
+- Use `/statdock preview` to see what every channel would be renamed to right
+  now, or `/statdock preview <template>` to try any text - neither spends a
+  Discord rename.
+- Set `placeholderapi.enabled: false` in `config.yml` to turn the hook off.
+
 ## Setup
 
 1. Create a bot at the [Discord Developer Portal](https://discord.com/developers/applications)
@@ -82,7 +111,8 @@ Usable in any channel template and in presence messages:
 | `reload` | Reload config, channels and token (hot-swaps the token) |
 | `forceupdate` | Update every channel now (still rate-limited) |
 | `status` | Show connection state, resolved IP, uptime and per-channel info |
-| `maintenance <on\|off>` | Toggle maintenance mode (🟣) |
+| `preview [template]` | Show the name each channel would get now, or render a template (no Discord edits) |
+| `maintenance <on\|off>` | Toggle maintenance mode (🟣); it stays on across restarts until turned off |
 
 ## Notes & limitations
 
@@ -92,23 +122,34 @@ Usable in any channel template and in presence messages:
   budget allows it - this is a Discord limit, not a bug.
 - **Counters don't persist:** uptime and player counts reset on every server
   start, by design. Only `{record}` can optionally persist.
+- **Maintenance persists:** maintenance mode is stored in `maintenance.txt` in
+  the plugin folder, so a server restarted under maintenance comes back showing
+  🟣 until you run `/statdock maintenance off`. On shutdown the channel still
+  shows 🔴 Offline as usual.
 - **Hard crashes:** if the server process is killed without a clean shutdown,
   the plugin cannot set the channel to 🔴 Offline, so it stays on the last name
   until the server starts again. This is an accepted, documented limitation.
+
+## Compatibility
+
+Paper **26.1 - 26.3** (Java 25). The plugin is compiled against the Paper 26.3
+API and tested on a Paper 26.3 server with PlaceholderAPI 2.12.3.
 
 ## Building
 
 Requires JDK 25 - if you don't have it installed, Gradle downloads a matching
 JDK automatically via the Foojay toolchain resolver. The build compiles
-directly against the real Paper API, so it needs network access to
-`repo.papermc.io` (the Paper API version is declared in `build.gradle.kts`).
+directly against the real Paper and PlaceholderAPI APIs, so it needs network
+access to `repo.papermc.io` and `repo.extendedclip.com` (both versions are
+declared in `build.gradle.kts`).
 
 ```bash
 ./gradlew build
 ```
 
 The jar is produced in `build/libs/`. Only `com.google.code.gson` is used on the
-Discord side and it is **provided by Paper at runtime**, so nothing is shaded.
+Discord side and it is **provided by Paper at runtime**, and PlaceholderAPI is an
+optional soft dependency, so nothing is shaded.
 
 ## License
 

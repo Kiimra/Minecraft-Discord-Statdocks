@@ -25,12 +25,13 @@ public final class PluginConfig {
     private final PresenceConfig presence;
     private final LagConfig lag;
     private final RecordConfig record;
+    private final boolean placeholderApi;
     private final Map<ServerState, String> defaults;
     private final List<ChannelConfig> channels;
     private final Map<String, String> messages;
 
     private PluginConfig(String token, int engineTickSeconds, RateLimitConfig rateLimit, IpConfig ip,
-                         PresenceConfig presence, LagConfig lag, RecordConfig record,
+                         PresenceConfig presence, LagConfig lag, RecordConfig record, boolean placeholderApi,
                          Map<ServerState, String> defaults, List<ChannelConfig> channels,
                          Map<String, String> messages) {
         this.token = token;
@@ -40,6 +41,7 @@ public final class PluginConfig {
         this.presence = presence;
         this.lag = lag;
         this.record = record;
+        this.placeholderApi = placeholderApi;
         this.defaults = defaults;
         this.channels = channels;
         this.messages = messages;
@@ -71,6 +73,11 @@ public final class PluginConfig {
 
     public RecordConfig record() {
         return record;
+    }
+
+    /** Whether %placeholders% may be parsed through PlaceholderAPI when it is installed. */
+    public boolean placeholderApi() {
+        return placeholderApi;
     }
 
     public List<ChannelConfig> channels() {
@@ -131,6 +138,8 @@ public final class PluginConfig {
                 cfg.getBoolean("record.enabled", false),
                 cfg.getBoolean("record.persist", false));
 
+        boolean placeholderApi = cfg.getBoolean("placeholderapi.enabled", true);
+
         Map<ServerState, String> defaults = new EnumMap<>(ServerState.class);
         defaults.put(ServerState.ONLINE, cfg.getString("defaults.online", "🟢│Online {online}/{max} ({uptime})"));
         defaults.put(ServerState.IDLE, cfg.getString("defaults.idle", "🌙│Zzz... {online}/{max} ({uptime})"));
@@ -181,7 +190,8 @@ public final class PluginConfig {
         putMessage(messages, cfg, "maintenance-usage", "&cUsage: /statdock maintenance <on|off>");
         putMessage(messages, cfg, "unknown-subcommand", "&cUnknown subcommand. Try /statdock help.");
 
-        return new PluginConfig(token, tick, rate, ip, presence, lag, record, defaults, channels, messages);
+        return new PluginConfig(token, tick, rate, ip, presence, lag, record, placeholderApi, defaults, channels,
+                messages);
     }
 
     private static void putMessage(Map<String, String> map, FileConfiguration cfg, String key, String def) {
