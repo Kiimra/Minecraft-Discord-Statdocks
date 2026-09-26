@@ -30,6 +30,9 @@ token: "YOUR_BOT_TOKEN"
 #   {version}  Minecraft version
 #   {record}   peak online players (only if 'record.enabled' is true)
 #   {players}  comma-separated list of online player names
+#
+# PlaceholderAPI placeholders (%...%) work too - see the 'placeholderapi'
+# section below.
 # ---------------------------------------------------------------------------
 
 # How often (seconds) the plugin re-checks the server and pushes due updates.
@@ -65,6 +68,22 @@ record:
   enabled: false
   persist: false
 
+# Optional PlaceholderAPI support. When PlaceholderAPI is installed, any
+# %placeholder% it provides can be used in every template and presence message,
+# mixed freely with the built-in {placeholders}, e.g.
+#   online: "🟢│{online}/{max} │ %server_unique_joins% joined"
+# Notes:
+#   - Install the expansions you need first, e.g. /papi ecloud download Server
+#     then /papi reload, and /statdock reload.
+#   - Placeholders are parsed without a player, so only server-wide ones work
+#     (e.g. %server_online%); player-specific ones are left as written.
+#   - Built-in {placeholders} are replaced first, so they can be used inside
+#     PlaceholderAPI ones, e.g. free slots: %math_0_{max}-{online}% (Math expansion).
+#   - Colour codes (§a...) are removed from the final name (Discord can't show them).
+#   - Test a template without spending Discord renames: /statdock preview <text>
+placeholderapi:
+  enabled: true
+
 # Optional bot presence (the bot's status text). Disabled by default so the
 # plugin stays purely REST-based; while disabled the bot appears offline in
 # Discord's member list, which is cosmetic only. Enabling it opens a single
@@ -82,6 +101,8 @@ presence:
     - "up {uptime}"
 
 # Default templates used by every channel, unless a channel overrides them.
+# Maintenance mode (/statdock maintenance on|off) is remembered across restarts
+# and reloads (stored in maintenance.txt) until you turn it off again.
 defaults:
   online: "🟢│Online {online}/{max} ({uptime})"
   idle: "🌙│Zzz... {online}/{max} ({uptime})"

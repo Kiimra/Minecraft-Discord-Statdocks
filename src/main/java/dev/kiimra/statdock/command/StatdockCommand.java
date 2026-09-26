@@ -9,16 +9,17 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import dev.kiimra.statdock.DiscordStatdockPlugin;
 import dev.kiimra.statdock.config.PluginConfig;
+import dev.kiimra.statdock.engine.ServerSnapshot;
 import dev.kiimra.statdock.engine.StatdockEngine;
 import dev.kiimra.statdock.util.TimeFormatter;
 import dev.kiimra.statdock.util.Text;
 
-/** Handles {@code /statdock reload|forceupdate|status|maintenance|help}. */
+/** Handles {@code /statdock reload|forceupdate|status|preview|maintenance|help}. */
 public final class StatdockCommand implements CommandExecutor, TabCompleter {
 
     private static final String PERMISSION = "statdock.admin";
     private static final List<String> SUBCOMMANDS =
-            List.of("reload", "forceupdate", "status", "maintenance", "help");
+            List.of("reload", "forceupdate", "status", "preview", "maintenance", "help");
 
     private final DiscordStatdockPlugin plugin;
 
@@ -40,6 +41,7 @@ public final class StatdockCommand implements CommandExecutor, TabCompleter {
             case "reload" -> handleReload(sender);
             case "forceupdate" -> handleForceUpdate(sender);
             case "status" -> handleStatus(sender);
+            case "preview" -> handlePreview(sender, args);
             case "maintenance" -> handleMaintenance(sender, args);
             case "help" -> sendHelp(sender, label);
             default -> send(sender, msg("unknown-subcommand"));
@@ -101,6 +103,7 @@ public final class StatdockCommand implements CommandExecutor, TabCompleter {
         send(sender, "&7Resolved IP: &f" + plugin.resolvedIp());
         send(sender, "&7Maintenance: " + (engine.isMaintenance() ? "&aON" : "&7off"));
         send(sender, "&7Presence: " + (config.presence().enabled() ? "&aenabled" : "&7disabled"));
+        send(sender, "&7PlaceholderAPI: " + (plugin.placeholderApiHooked() ? "&ahooked" : "&7not hooked"));
         send(sender, "&7Channels (&f" + engine.channels().size() + "&7):");
         long now = System.currentTimeMillis();
         for (StatdockEngine.ManagedChannel mc : engine.channels()) {
@@ -116,11 +119,34 @@ public final class StatdockCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /**
+     * Shows what each channel would be renamed to right now, or renders the
+     * given template, without spending any Discord renames. Handy for testing
+     * PlaceholderAPI placeholders.
+     */
+    private void handlePreview(CommandSender sender, String[] args) {
+        StatdockEngine engine = plugin.engine();
+        if (engine == null) {
+            send(sender, "&cNo bot token configured - nothing to preview.");
+            return;
+        }
+        ServerSnapshot snapshot = plugin.sampleSnapshot();
+        if (args.length > 1) {
+            String template = String.join(" ", List.of(args).subList(1, args.length));
+            send(sender, "&7Preview: &f" + engine.renderName(template, snapshot));
+            return;
+        }
+        send(sender, "&7Current state: &f" + engine.stateFor(snapshot).key());
+        engine.render(snapshot).forEach((mc, name) ->
+                send(sender, "  &7- &b" + mc.name() + "&7: &f" + (name.isEmpty() ? "&8(unchanged)" : name)));
+    }
+
     private void sendHelp(CommandSender sender, String label) {
         send(sender, "&bDiscordStatdockUpdater &7commands:");
         send(sender, "&f/" + label + " reload &7- reload config, channels and token");
         send(sender, "&f/" + label + " forceupdate &7- update all channels now");
         send(sender, "&f/" + label + " status &7- show connection and channel status");
+        send(sender, "&f/" + label + " preview [template] &7- show the names channels would get now");
         send(sender, "&f/" + label + " maintenance <on|off> &7- toggle maintenance mode");
     }
 

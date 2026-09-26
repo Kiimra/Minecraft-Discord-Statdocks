@@ -2,13 +2,14 @@ name: DiscordStatdockUpdater
 version: '${version}'
 main: dev.kiimra.statdock.DiscordStatdockPlugin
 api-version: '1.21'
+softdepend: [PlaceholderAPI]
 description: Keeps Discord voice, stage and category channels updated with live server stats over the Discord REST API.
 author: Kiimra
 website: https://github.com/Kiimra/Minecraft-Discord-Statdock
 commands:
   statdock:
     description: Manage DiscordStatdockUpdater.
-    usage: /statdock <reload|forceupdate|status|maintenance>
+    usage: /statdock <reload|forceupdate|status|preview|maintenance>
     permission: statdock.admin
     aliases: [statdocks, dsu]
 permissions:

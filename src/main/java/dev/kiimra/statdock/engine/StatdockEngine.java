@@ -1,8 +1,11 @@
 package dev.kiimra.statdock.engine;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
 import dev.kiimra.statdock.config.ChannelConfig;
 import dev.kiimra.statdock.config.PluginConfig;
@@ -14,8 +17,10 @@ import dev.kiimra.statdock.discord.RateLimitBudget;
  * Owns the update logic for every configured statdock: computes each channel's
  * desired name from the current {@link ServerState}, skips no-op edits, and
  * applies changes through Discord while respecting the per-channel rename
- * budget. All edits happen on the async engine thread; state transitions
- * (join/quit/maintenance) merely flag an immediate pass.
+ * budget. Names are rendered on the main thread ({@link #render}), because
+ * external placeholders (PlaceholderAPI) must not be parsed off-thread; all
+ * edits then happen on the async engine thread ({@link #tick}). State
+ * transitions (join/quit/maintenance) merely flag an immediate pass.
  */
 public final class StatdockEngine {
 
@@ -27,21 +32,29 @@ public final class StatdockEngine {
     private final DiscordRestClient discord;
     private final UptimeTracker uptime;
     private final RecordTracker record;
+    private final MaintenanceStore maintenance;
+    private final UnaryOperator<String> externalPlaceholders;
     private final Logger logger;
     private final String resolvedIp;
     private final List<ManagedChannel> channels = new ArrayList<>();
     private final ReentrantLock tickLock = new ReentrantLock();
 
-    private volatile boolean maintenance;
     private volatile boolean shuttingDown;
 
+    /**
+     * @param externalPlaceholders applied after the built-in placeholders (e.g.
+     *                             PlaceholderAPI), or {@code null} for none
+     */
     public StatdockEngine(PluginConfig config, DiscordRestClient discord, UptimeTracker uptime,
-                          RecordTracker record, String resolvedIp, Logger logger) {
+                          RecordTracker record, MaintenanceStore maintenance, String resolvedIp,
+                          UnaryOperator<String> externalPlaceholders, Logger logger) {
         this.config = config;
         this.discord = discord;
         this.uptime = uptime;
         this.record = record;
+        this.maintenance = maintenance;
         this.resolvedIp = resolvedIp;
+        this.externalPlaceholders = externalPlaceholders;
         this.logger = logger;
         long windowMillis = config.rateLimit().windowSeconds() * 1000L;
         for (ChannelConfig cc : config.channels()) {
@@ -66,13 +79,14 @@ public final class StatdockEngine {
         }
     }
 
-    public void setMaintenance(boolean maintenance) {
-        this.maintenance = maintenance;
+    /** Toggles maintenance mode; the choice is persisted and survives restarts. */
+    public void setMaintenance(boolean enabled) {
+        maintenance.set(enabled);
         requestImmediate();
     }
 
     public boolean isMaintenance() {
-        return maintenance;
+        return maintenance.isEnabled();
     }
 
     /** Flags every channel for an out-of-cycle update on the next pass. */
@@ -87,31 +101,53 @@ public final class StatdockEngine {
     }
 
     /**
-     * One engine pass. Safe to call from overlapping async tasks: if a pass is
-     * already running the call is dropped (the next scheduled pass will catch
-     * up, since desired names are recomputed every time).
+     * Computes every channel's desired name for the current state. Must run on
+     * the main thread, since it parses external placeholders; hand the result
+     * to {@link #tick} on the async thread.
      */
-    public void tick(ServerSnapshot snapshot) {
+    public Map<ManagedChannel, String> render(ServerSnapshot snapshot) {
+        record.update(snapshot.online());
+        ServerState state = stateFor(snapshot);
+        Map<ManagedChannel, String> names = new LinkedHashMap<>();
+        for (ManagedChannel mc : channels) {
+            names.put(mc, renderName(config.template(mc.config, state), snapshot));
+        }
+        return names;
+    }
+
+    /** Renders a single template exactly as a channel name would be. Main thread only. */
+    public String renderName(String template, ServerSnapshot snapshot) {
+        return clampName(PlaceholderResolver.resolve(template, context(snapshot), externalPlaceholders));
+    }
+
+    /**
+     * One engine pass over names produced by {@link #render}. Safe to call from
+     * overlapping async tasks: if a pass is already running the call is dropped
+     * (the next scheduled pass will catch up, since names are re-rendered every
+     * time).
+     */
+    public void tick(Map<ManagedChannel, String> desiredNames) {
         if (!tickLock.tryLock()) {
             return;
         }
         try {
-            record.update(snapshot.online());
+            if (shuttingDown) {
+                return; // Names rendered before shutdown must not overwrite the offline name.
+            }
             long now = System.currentTimeMillis();
             for (ManagedChannel mc : channels) {
-                if (mc.skipped) {
+                String desired = desiredNames.get(mc);
+                if (mc.skipped || desired == null) {
                     continue;
                 }
-                applyChannel(mc, snapshot, now);
+                applyChannel(mc, desired, now);
             }
         } finally {
             tickLock.unlock();
         }
     }
 
-    private void applyChannel(ManagedChannel mc, ServerSnapshot snapshot, long now) {
-        ServerState state = computeState(snapshot);
-        String desired = clampName(PlaceholderResolver.resolve(config.template(mc.config, state), context(snapshot)));
+    private void applyChannel(ManagedChannel mc, String desired, long now) {
         if (desired.isEmpty()) {
             return; // Nothing to show for this state; leave the channel untouched.
         }
@@ -158,7 +194,7 @@ public final class StatdockEngine {
      * Best-effort synchronous push of the offline name to every channel, used
      * on shutdown before the server stops. Ignores the local budget (this is
      * the one edit that matters most) but a Discord 429 can still prevent it -
-     * a documented limitation if the server later crashes.
+     * a documented limitation if the server later crashes. Main thread only.
      */
     public void pushOffline() {
         shuttingDown = true;
@@ -170,8 +206,7 @@ public final class StatdockEngine {
                 if (mc.skipped) {
                     continue;
                 }
-                String desired = clampName(
-                        PlaceholderResolver.resolve(config.template(mc.config, ServerState.OFFLINE), context(snapshot)));
+                String desired = renderName(config.template(mc.config, ServerState.OFFLINE), snapshot);
                 if (desired.isEmpty() || desired.equals(mc.lastAppliedName)) {
                     continue;
                 }
@@ -188,11 +223,12 @@ public final class StatdockEngine {
         }
     }
 
-    private ServerState computeState(ServerSnapshot snapshot) {
+    /** The state the statdocks should display for {@code snapshot}. */
+    public ServerState stateFor(ServerSnapshot snapshot) {
         if (shuttingDown) {
             return ServerState.OFFLINE;
         }
-        if (maintenance) {
+        if (maintenance.isEnabled()) {
             return ServerState.MAINTENANCE;
         }
         if (config.lag().enabled() && snapshot.tps() < config.lag().thresholdTps()) {
